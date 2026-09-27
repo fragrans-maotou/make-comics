@@ -47,7 +47,7 @@
 
 @theme inline {
   /* Adding tight tracking to Inter font for consistency */
-  --font-sans: "Inter", sans-serif;
+  --font-sans: var(--font-noto), "Inter", sans-serif;
   --font-display: "Bangers", cursive;
   --font-heading: "Instrument Serif", serif;
   --color-background: var(--background);

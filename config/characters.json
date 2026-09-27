@@ -1,0 +1,48 @@
+{
+  "styleId": "xiyou-chibi",
+  "styleName": "西游简笔",
+  "stylePrompt": "super-deformed Q-version chibi sticker, head about half the total height, tiny stubby body, short thick limbs, huge round cute eyes, playful smile, not solemn and not an adult body. Thick black outlines, flat colors, simple background, no realistic shading, no text. Keep classic costumes, species, and signature props. No business suits, no t-shirts.",
+  "referenceDir": "characters/refs",
+  "characters": [
+    {
+      "id": "tangseng",
+      "name": "唐僧",
+      "nameEn": "Tang Sanzang",
+      "aliases": ["唐三藏", "师傅", "唐长老"],
+      "referenceFiles": ["tangseng.png", "tangseng-side.png"],
+      "visualDescription": "Super-deformed Q-version Tang Sanzang, enormous round head and a tiny stubby body, cute not solemn. Pale skin, fully shaved bald head, small golden circlet, huge round eyes, little smile, no beard. Deep crimson kasaya with gold trim over a cream inner robe. A short wooden staff. Tiny hands and feet."
+    },
+    {
+      "id": "wukong",
+      "name": "孙悟空",
+      "nameEn": "Sun Wukong",
+      "aliases": ["悟空", "孙行者", "美猴王", "行者"],
+      "referenceFiles": ["wukong.png", "wukong-side.png"],
+      "visualDescription": "Super-deformed Q-version Sun Wukong, enormous round head and a tiny stubby body, cute not solemn. Golden-brown fur, peach face, round monkey ears, huge round eyes, short spiky tuft, thin gold fillet. Short red-and-gold tunic, tiger-stripe skirt, curling tail. A slim golden staff. Tiny hands and feet."
+    },
+    {
+      "id": "bajie",
+      "name": "猪八戒",
+      "nameEn": "Zhu Bajie",
+      "aliases": ["八戒", "悟能", "猪悟能", "天蓬"],
+      "referenceFiles": ["bajie.png", "bajie-side.png"],
+      "visualDescription": "Super-deformed Q-version Zhu Bajie, enormous round head and a tiny stubby body, cute not solemn. Pink skin, big pig snout, floppy ears, huge round eyes, small belly. Dark teal vest, loose brown pants. A small rake. Tiny hands and feet. Not a realistic pig and not an adult body."
+    },
+    {
+      "id": "shaseng",
+      "name": "沙僧",
+      "nameEn": "Sha Wujing",
+      "aliases": ["沙和尚", "沙悟净", "悟净"],
+      "referenceFiles": ["shaseng.png", "shaseng-side.png"],
+      "visualDescription": "Super-deformed Q-version Sha Wujing, enormous round head and a tiny stubby body, cute not solemn. Muted blue-gray skin, bald round head, huge round eyes, a small short beard, wooden prayer beads. Ochre-brown robe. A small crescent monk spade. Tiny hands and feet. Same height as the others."
+    },
+    {
+      "id": "bailongma",
+      "name": "白龙马",
+      "nameEn": "White Dragon Horse",
+      "aliases": ["白龙", "小白龙", "龙马"],
+      "referenceFiles": ["bailongma.png", "bailongma-side.png"],
+      "visualDescription": "Super-deformed Q-version white horse, enormous round head and a tiny stubby body, cute not a realistic horse. White coat, short little legs, tiny pale dragon horns, fluffy white mane, pale blue eyes, small red saddle. Not a person."
+    }
+  ]
+}
