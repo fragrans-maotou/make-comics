@@ -1,124 +1,129 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { getStoryWithPagesBySlug, updateStory } from "@/lib/db-actions";
-import { db } from "@/lib/db";
-import { stories } from "@/lib/schema";
-import { eq } from "drizzle-orm";
+import { NextResponse } from "next/server";
+import { requireUserId } from "@/lib/auth";
+import {
+  getStoryBundleBySlug,
+  updateStory,
+  updateStoryScript,
+  type PanelView,
+} from "@/lib/db-actions";
+import { composeBundle } from "@/lib/pipeline";
+import { presentStory } from "@/lib/present";
+import { formatZodError, validateScript, type StripLayout } from "@/lib/script-schema";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ storySlug: string }> }
-) {
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+type Params = { params: Promise<{ storySlug: string }> };
+
+export async function GET(_request: Request, { params }: Params) {
   try {
-    const authResult = await auth();
-    const { userId } = authResult;
-
-    const { storySlug: slug } = await params;
-
-    // Special case: if slug is "all", return user's stories for debugging
-    if (slug === "all") {
-      if (!userId) {
-        return NextResponse.json(
-          { error: "Authentication required for this endpoint" },
-          { status: 401 }
-        );
-      }
-      const userStories = await db
-        .select()
-        .from(stories)
-        .where(eq(stories.userId, userId));
-      return NextResponse.json({
-        message: "User stories",
-        stories: userStories.map((s) => ({
-          id: s.id,
-          slug: s.slug,
-          title: s.title,
-        })),
-      });
-    }
-
-    if (!slug) {
-      return NextResponse.json(
-        { error: "Story slug is required" },
-        { status: 400 }
-      );
-    }
-
-    const result = await getStoryWithPagesBySlug(slug);
-
-    if (!result) {
-      return NextResponse.json({ error: "Story not found" }, { status: 404 });
-    }
-
-    // Check if the story belongs to the authenticated user
-    const isOwner = userId ? result.story.userId === userId : false;
-
-    // Return the story data with ownership information
-    const responseData = {
-      ...result,
-      isOwner,
-    };
-    return NextResponse.json(responseData);
+    const { storySlug } = await params;
+    const bundle = await getStoryBundleBySlug(storySlug);
+    if (!bundle) return NextResponse.json({ error: "找不到这集漫画" }, { status: 404 });
+    const auth = await requireUserId();
+    const isOwner = auth.ok && bundle.story.userId === auth.userId;
+    return NextResponse.json(presentStory(bundle, isOwner));
   } catch (error) {
-    console.error("Error fetching story:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch story" },
-      { status: 500 }
-    );
+    console.error(error);
+    return NextResponse.json({ error: "读取漫画失败" }, { status: 500 });
   }
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ storySlug: string }> }
-) {
+export async function PATCH(request: Request, { params }: Params) {
   try {
-    const { userId } = await auth();
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
+    const auth = await requireUserId();
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const { storySlug } = await params;
+    const bundle = await getStoryBundleBySlug(storySlug);
+    if (!bundle) return NextResponse.json({ error: "找不到这集漫画" }, { status: 404 });
+    if (bundle.story.userId !== auth.userId) {
+      return NextResponse.json({ error: "只能修改自己的漫画" }, { status: 403 });
     }
 
-    const { storySlug: slug } = await params;
+    const body = await request.json();
+    const layout: StripLayout = body.layout === "grid" ? "grid" : "vertical";
+    const title = typeof body.title === "string" ? body.title : bundle.story.title;
+    const incoming = Array.isArray(body.panels) ? body.panels : [];
+    const merged: PanelView[] = bundle.panels.map((panel) => {
+      const edit = incoming.find((item: { panelIndex?: number }) => item?.panelIndex === panel.panelIndex);
+      if (!edit) return panel;
+      return {
+        ...panel,
+        scene: typeof edit.scene === "string" ? edit.scene : panel.scene,
+        shot: edit.shot === "wide" || edit.shot === "close-up" || edit.shot === "medium" ? edit.shot : panel.shot,
+        characters: Array.isArray(edit.characters) ? edit.characters.map(String) : panel.characters,
+        dialogue: Array.isArray(edit.dialogue)
+          ? edit.dialogue.map((line: { speaker?: string; text?: string; side?: string }) => ({
+              speaker: String(line.speaker ?? ""),
+              text: String(line.text ?? ""),
+              side: line.side === "right" ? "right" : "left",
+            }))
+          : panel.dialogue,
+      };
+    });
 
-    if (!slug) {
-      return NextResponse.json(
-        { error: "Story slug is required" },
-        { status: 400 }
-      );
+    const script = validateScript(
+      {
+        title,
+        summary: bundle.story.description ?? undefined,
+        panels: merged.map((panel) => ({
+          index: panel.panelIndex,
+          role: panel.role,
+          scene: panel.scene,
+          shot: panel.shot,
+          characters: panel.characters,
+          dialogue: panel.dialogue,
+        })),
+      },
+      merged.length,
+    );
+
+    const nextPanels = merged.map((panel, index) => ({
+      ...panel,
+      scene: script.panels[index].scene,
+      shot: script.panels[index].shot,
+      characters: script.panels[index].characters,
+      dialogue: script.panels[index].dialogue,
+    }));
+
+    await updateStoryScript({
+      storyId: bundle.story.id,
+      title: script.title,
+      description: bundle.story.description ?? undefined,
+      layout,
+      panels: nextPanels,
+    });
+
+    let fresh = await getStoryBundleBySlug(storySlug);
+    if (fresh && fresh.panels.every((panel) => panel.imageUrl)) {
+      fresh = await composeBundle(fresh, layout);
     }
+    if (!fresh) return NextResponse.json({ error: "保存后找不到漫画" }, { status: 500 });
+    return NextResponse.json(presentStory(fresh, true));
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: formatZodError(error) }, { status: 400 });
+  }
+}
 
-    const result = await getStoryWithPagesBySlug(slug);
-
-    if (!result) {
-      return NextResponse.json({ error: "Story not found" }, { status: 404 });
+export async function PUT(request: Request, { params }: Params) {
+  try {
+    const auth = await requireUserId();
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const { storySlug } = await params;
+    const bundle = await getStoryBundleBySlug(storySlug);
+    if (!bundle) return NextResponse.json({ error: "找不到这集漫画" }, { status: 404 });
+    if (bundle.story.userId !== auth.userId) {
+      return NextResponse.json({ error: "只能修改自己的漫画" }, { status: 403 });
     }
-
-    // Check if the story belongs to the authenticated user
-    if (result.story.userId !== userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
-
     const { title } = await request.json();
-
-    if (!title || typeof title !== "string" || title.trim().length === 0) {
-      return NextResponse.json(
-        { error: "Title is required and must be a non-empty string" },
-        { status: 400 }
-      );
+    if (!title || typeof title !== "string" || !title.trim()) {
+      return NextResponse.json({ error: "标题不能为空" }, { status: 400 });
     }
-
-    await updateStory(result.story.id, { title: title.trim() });
-
+    await updateStory(bundle.story.id, { title: title.trim() });
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Error updating story:", error);
-    return NextResponse.json(
-      { error: "Failed to update story" },
-      { status: 500 }
-    );
+    console.error(error);
+    return NextResponse.json({ error: "更新标题失败" }, { status: 500 });
   }
 }

@@ -3,9 +3,9 @@ import "./envConfig.ts";
 
 export default defineConfig({
   schema: "./lib/schema.ts",
-  out: "./drizzle",
-  dialect: "postgresql",
+  out: "./drizzle-sqlite",
+  dialect: "sqlite",
   dbCredentials: {
-    url: process.env.DATABASE_URL!,
+    url: process.env.SQLITE_PATH || "./data/comics.db",
   },
 });

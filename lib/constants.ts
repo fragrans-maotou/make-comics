@@ -1,5 +1,11 @@
 export const COMIC_STYLES = [
   {
+    id: "xiyou-chibi",
+    name: "西游简笔",
+    prompt:
+      "simple gag-comic cartoon, clean thick black outlines, flat colors, simple background, cute chibi proportions",
+  },
+  {
     id: "american-modern",
     name: "American Modern",
     prompt: "contemporary American superhero comic style, bold vibrant colors, dynamic heroic poses, detailed muscular anatomy, cinematic action scenes, modern digital art",

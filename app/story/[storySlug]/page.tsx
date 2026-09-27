@@ -1,6 +1,8 @@
 import { Metadata } from "next";
-import { getStoryWithPagesBySlug } from "@/lib/db-actions";
+import { getStoryBundleBySlug } from "@/lib/db-actions";
 import { StoryEditorClient } from "./story-editor-client";
+
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
@@ -8,42 +10,19 @@ export async function generateMetadata({
   params: Promise<{ storySlug: string }>;
 }): Promise<Metadata> {
   const { storySlug: slug } = await params;
-
   try {
-    const result = await getStoryWithPagesBySlug(slug);
-
+    const result = await getStoryBundleBySlug(slug);
     if (!result) {
-      return {
-        title: "Story Not Found | MakeComics",
-        description: "The requested comic story could not be found.",
-      };
+      return { title: "找不到这集 | 西游四格" };
     }
-
-    const { story, pages } = result;
-    const title = `${story.title} | MakeComics`;
-    const description =
-      story.description ||
-      `${story.title} - Create your own comic book with MakeComics`;
-
-    // Use the first page's image as the Open Graph image, or default if none
-    const firstPageImage = pages.length > 0 && pages[0].generatedImageUrl ? pages[0].generatedImageUrl : "/placeholder.jpg";
-
+    const image = result.story.composedImageUrl || result.panels[0]?.imageUrl || "/placeholder.jpg";
     return {
-      title,
-      description,
-      openGraph: {
-        title,
-        description,
-        type: "website",
-        images: [firstPageImage],
-      },
+      title: `${result.story.title} | 西游四格`,
+      description: result.story.description || result.story.idea,
+      openGraph: { images: [image] },
     };
-  } catch (error) {
-    console.error("Error generating metadata:", error);
-    return {
-      title: "MakeComics",
-      description: "Create your own comic book with MakeComics",
-    };
+  } catch {
+    return { title: "西游四格" };
   }
 }
 

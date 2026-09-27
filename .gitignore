@@ -17,6 +17,9 @@ yarn-error.log*
 # env files
 .env*
 
+# local sqlite database and generated media
+/data
+
 # vercel
 .vercel
 

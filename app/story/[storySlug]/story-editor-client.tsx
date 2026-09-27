@@ -1,580 +1,372 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { Loader2 } from "lucide-react";
+import { Navbar } from "@/components/landing/navbar";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { useApiKey } from "@/hooks/use-api-key";
-import { useAuth } from "@clerk/nextjs";
-import { EditorToolbar } from "@/components/editor/editor-toolbar";
-import { PageSidebar } from "@/components/editor/page-sidebar";
-import { ComicCanvas } from "@/components/editor/comic-canvas";
-import { ApiKeyModal } from "@/components/api-key-modal";
-import { PageInfoSheet } from "@/components/editor/page-info-sheet";
-import { GeneratePageModal } from "@/components/editor/generate-page-modal";
-import { StoryLoader } from "@/components/ui/story-loader";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import characterConfig from "@/config/characters.json";
+import type { DialogueLine, PanelRole, Shot } from "@/lib/script-schema";
 
-interface PageData {
-  id: number; // pageNumber for component compatibility
-  title: string;
-  image: string;
-  prompt: string;
-  characterUploads?: string[];
-  style: string;
-  dbId?: string; // actual database UUID
-}
+const CAST = characterConfig.characters.map((character) => character.name);
+const ROLE_LABEL: Record<PanelRole, string> = {
+  setup: "起",
+  develop: "承",
+  turn: "转",
+  punchline: "合",
+};
+const SHOTS: Array<{ id: Shot; label: string }> = [
+  { id: "wide", label: "远景" },
+  { id: "medium", label: "中景" },
+  { id: "close-up", label: "特写" },
+];
 
-interface StoryData {
+type PanelForm = {
   id: string;
-  slug: string;
+  panelIndex: number;
+  role: PanelRole;
+  scene: string;
+  shot: Shot;
+  characters: string[];
+  dialogue: DialogueLine[];
+  imageUrl: string | null;
+};
+
+type StoryForm = {
   title: string;
-  description?: string | null;
-  style: string;
-  userId?: string | null;
-  isOwner?: boolean;
+  slug: string;
+  idea: string;
+  layout: "vertical" | "grid";
+  composedImageUrl: string | null;
+  updatedAt: string;
+  isOwner: boolean;
+};
+
+function charCount(text: string) {
+  return Array.from(text).length;
 }
 
 export function StoryEditorClient() {
   const params = useParams();
   const slug = params.storySlug as string;
-  const { isSignedIn, isLoaded } = useAuth();
-
-  const [story, setStory] = useState<StoryData | null>(null);
-  const [isOwner, setIsOwner] = useState<boolean>(false);
-  const [pages, setPages] = useState<PageData[]>([]);
-  const [currentPage, setCurrentPage] = useState(0);
-  const [showApiModal, setShowApiModal] = useState(false);
-  const [showInfoSheet, setShowInfoSheet] = useState(false);
-  const [showGenerateModal, setShowGenerateModal] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [pageToDelete, setPageToDelete] = useState<number | null>(null);
-  const [showRedrawDialog, setShowRedrawDialog] = useState(false);
-  const [loadingPageId, setLoadingPageId] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [existingCharacterImages, setExistingCharacterImages] = useState<
-    string[]
-  >([]);
-  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const { toast } = useToast();
-  const [apiKey, setApiKey] = useApiKey();
+  const [story, setStory] = useState<StoryForm | null>(null);
+  const [panels, setPanels] = useState<PanelForm[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [regenerating, setRegenerating] = useState<number | null>(null);
 
-
-  const handleTitleUpdate = (newTitle: string) => {
-    setStory(prev => prev ? { ...prev, title: newTitle } : null);
+  const apply = (data: { story: StoryForm & { description?: string | null }; panels: PanelForm[] }) => {
+    setStory({
+      title: data.story.title,
+      slug: data.story.slug,
+      idea: data.story.idea,
+      layout: data.story.layout === "grid" ? "grid" : "vertical",
+      composedImageUrl: data.story.composedImageUrl,
+      updatedAt: data.story.updatedAt,
+      isOwner: data.story.isOwner,
+    });
+    setPanels(data.panels);
   };
 
-  // Load story and pages from API
   useEffect(() => {
-    const loadStoryData = async () => {
-      try {
-        const response = await fetch(`/api/stories/${slug}`);
-        if (!response.ok) {
-          throw new Error("Story not found");
-        }
-
-        const result = await response.json();
-    
-        const {
-          story: storyData,
-          pages: pagesData,
-          isOwner: ownerStatus,
-        } = result;
-        
-        setStory(storyData);
-        setIsOwner(ownerStatus ?? false); // Default to false if undefined
-        setPages(
-          pagesData.map((page: any) => ({
-            id: page.pageNumber,
-            title: storyData.title,
-            image: page.generatedImageUrl || "",
-            prompt: page.prompt,
-            characterUploads: page.characterImageUrls,
-            style: storyData.style || "noir",
-            dbId: page.id,
-          }))
-        );
-
-        // Load existing character images for reuse
-        const uniqueImages = [
-          ...new Set(
-            pagesData.flatMap((page: any) => page.characterImageUrls || [])
-          ),
-        ];
-        setExistingCharacterImages(uniqueImages as string[]);
-      } catch (error) {
-        console.error("Error loading story:", error);
+    let cancelled = false;
+    fetch(`/api/stories/${slug}`)
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "读取失败");
+        if (!cancelled) apply(data);
+      })
+      .catch((error) => {
         toast({
-          title: "Error loading story",
-          description: "Failed to load story data.",
+          title: "没有打开这集漫画",
+          description: error instanceof Error ? error.message : "",
           variant: "destructive",
-          duration: 4000,
         });
-      } finally {
-        setIsLoading(false);
-      }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
     };
-
-    if (slug) {
-      loadStoryData();
-    }
   }, [slug, toast]);
 
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger shortcuts if user is typing in an input field
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable
-      ) {
-        return;
-      }
+  const payload = () => ({
+    title: story?.title,
+    layout: story?.layout,
+    panels: panels.map((panel) => ({
+      panelIndex: panel.panelIndex,
+      scene: panel.scene,
+      shot: panel.shot,
+      characters: panel.characters,
+      dialogue: panel.dialogue,
+    })),
+  });
 
-        if (e.key === "ArrowRight") {
-          e.preventDefault();
-          setCurrentPage((prev) => (prev < pages.length - 1 ? prev + 1 : prev));
-        } else if (e.key === "ArrowLeft") {
-          e.preventDefault();
-          setCurrentPage((prev) => (prev > 0 ? prev - 1 : prev));
-        } else if (e.key === "ArrowUp") {
-          e.preventDefault();
-          setCurrentPage((prev) => (prev > 0 ? prev - 1 : prev));
-        } else if (e.key === "ArrowDown") {
-          e.preventDefault();
-          setCurrentPage((prev) => (prev < pages.length - 1 ? prev + 1 : prev));
-        } else if (e.key === "i" || e.key === "I") {
-          e.preventDefault();
-          setShowInfoSheet(true);
-        } else if (e.key === "c" || e.key === "C") {
-          e.preventDefault();
-          handleAddPage();
-        }
-    };
+  const persist = async () => {
+    const response = await fetch(`/api/stories/${slug}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload()),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "保存失败");
+    apply(data);
+    return data;
+  };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [pages.length, apiKey]);
-
-
-  const handleAddPage = async () => {
-    if (!isLoaded || !isSignedIn) {
-      return;
-    }
-
-    // Check credits
+  const save = async () => {
+    setSaving(true);
     try {
-      const hasApiKey = !!apiKey;
-      const response = await fetch('/api/check-credits', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ hasApiKey }),
+      const data = await persist();
+      toast({ title: data.story.composedImageUrl ? "对白已更新到长图" : "剧本已保存" });
+    } catch (error) {
+      toast({
+        title: "没有保存",
+        description: error instanceof Error ? error.message : "",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const generate = async () => {
+    setGenerating(true);
+    try {
+      await persist();
+      const response = await fetch(`/api/stories/${slug}/generate`, { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "出图失败");
+      apply(data);
+      toast({ title: "长图已经合成" });
+    } catch (error) {
+      toast({
+        title: "画面没有生成",
+        description: error instanceof Error ? error.message : "",
+        variant: "destructive",
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const regenerate = async (panelIndex: number) => {
+    setRegenerating(panelIndex);
+    try {
+      await persist();
+      const response = await fetch(`/api/stories/${slug}/panels/${panelIndex}/regenerate`, {
+        method: "POST",
       });
       const data = await response.json();
-
-      if (!response.ok) {
-        toast({
-          title: "Error",
-          description: "Failed to check credits",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (hasApiKey || data.creditsRemaining === "unlimited") {
-        // Has API key, unlimited
-        setShowGenerateModal(true);
-      } else if (data.creditsRemaining > 0) {
-        // Has credits
-        setShowGenerateModal(true);
-        } else {
-          // No credits left, show API modal
-          setShowApiModal(true);
-          toast({
-            title: "No credits remaining",
-            description: "You get 3 credits weekly. Add an API key for unlimited generation.",
-            variant: "destructive",
-          });
-        }
+      if (!response.ok) throw new Error(data.error || "重画失败");
+      apply(data);
+      toast({ title: `第 ${panelIndex} 格已重画` });
     } catch (error) {
-      console.error("Error checking credits:", error);
       toast({
-        title: "Error",
-        description: "Failed to check credits",
+        title: "这一格没有重画",
+        description: error instanceof Error ? error.message : "",
         variant: "destructive",
-      });
-    }
-  };
-
-  const handleRedrawPage = () => {
-    if (!isLoaded || !isSignedIn) {
-      return;
-    }
-    if (!apiKey) {
-      setShowApiModal(true);
-      return;
-    }
-    setShowRedrawDialog(true);
-  };
-
-  const confirmRedrawPage = async () => {
-    setShowRedrawDialog(false);
-
-    const currentPageData = pages[currentPage];
-    if (!currentPageData) return;
-
-    setLoadingPageId(currentPage);
-
-    try {
-      const response = await fetch("/api/add-page", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey!,
-        },
-        body: JSON.stringify({
-          storyId: story?.slug,
-          pageId: currentPageData.dbId, // Add pageId to override existing page
-          prompt: currentPageData.prompt,
-          characterImages: currentPageData.characterUploads || [],
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to redraw page");
-      }
-
-      const result = await response.json();
-
-      // Update the current page with the new image
-      setPages((prevPages) =>
-        prevPages.map((page, index) =>
-          index === currentPage ? { ...page, image: result.imageUrl } : page
-        )
-      );
-
-      toast({
-        title: "Page redrawn successfully",
-        description: "The page has been regenerated with a fresh image.",
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error("Error redrawing page:", error);
-      toast({
-        title: "Failed to redraw page",
-        description:
-          error instanceof Error ? error.message : "Failed to redraw page",
-        variant: "destructive",
-        duration: 4000,
       });
     } finally {
-      setLoadingPageId(null);
+      setRegenerating(null);
     }
   };
 
-  const handleApiKeyClick = () => {
-    setShowApiModal(true);
+  const updatePanel = (index: number, patch: Partial<PanelForm>) => {
+    setPanels((current) => current.map((panel) => (panel.panelIndex === index ? { ...panel, ...patch } : panel)));
   };
 
-  const downloadPDF = async () => {
-    if (!story || pages.length === 0) return;
-
-    setIsGeneratingPDF(true);
-
-    try {
-      const response = await fetch(`/api/download-pdf?storySlug=${story.slug}`);
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to generate PDF");
-      }
-
-      // Create blob from response and trigger download
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${story.title}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-
-      toast({
-        title: "PDF downloaded",
-        description: "Your comic has been downloaded as a PDF.",
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      toast({
-        title: "Failed to generate PDF",
-        description: "An error occurred while generating the PDF.",
-        variant: "destructive",
-        duration: 4000,
-      });
-    } finally {
-      setIsGeneratingPDF(false);
-    }
-  };
-
-  const handleDeletePage = (pageIndex: number) => {
-    setPageToDelete(pageIndex);
-    setShowDeleteDialog(true);
-  };
-
-  const confirmDeletePage = async () => {
-    if (pageToDelete === null) return;
-
-    const pageData = pages[pageToDelete];
-    if (!pageData) return;
-
-    setShowDeleteDialog(false);
-
-    try {
-      const response = await fetch("/api/delete-page", {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          storySlug: story?.slug,
-          pageId: pageData.dbId,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to delete page");
-      }
-
-      // Remove the page from state
-      setPages((prevPages) => {
-        const newPages = prevPages.filter((_, index) => index !== pageToDelete);
-        // Adjust currentPage if necessary
-        if (currentPage >= newPages.length) {
-          setCurrentPage(Math.max(0, newPages.length - 1));
-        } else if (currentPage > pageToDelete) {
-          setCurrentPage(currentPage - 1);
-        }
-        return newPages;
-      });
-
-      toast({
-        title: "Page deleted successfully",
-        description: "The page has been removed from your comic.",
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error("Error deleting page:", error);
-      toast({
-        title: "Failed to delete page",
-        description:
-          error instanceof Error ? error.message : "Failed to delete page",
-        variant: "destructive",
-        duration: 4000,
-      });
-    } finally {
-      setPageToDelete(null);
-    }
-  };
-
-  const handleApiKeySubmit = (key: string) => {
-    setApiKey(key);
-    setShowApiModal(false);
-  };
-
-  const handleGeneratePage = async (data: {
-    prompt: string;
-    characterUrls?: string[];
-  }): Promise<void> => {
-    if (!apiKey) {
-      setShowApiModal(true);
-      throw new Error("API key required");
-    }
-
-    // Add new page mode
-    const response = await fetch("/api/add-page", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        storyId: story?.slug,
-        prompt: data.prompt,
-        characterImages: data.characterUrls || [],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || "Failed to generate page");
-    }
-
-    const result = await response.json();
-
-    // Update character images list with new ones
-    const newCharacterUrls = data.characterUrls || [];
-    setExistingCharacterImages((prev) => {
-      const combined = [...prev, ...newCharacterUrls];
-      // Remove duplicates while preserving order
-      const unique = Array.from(new Set(combined));
-      return unique;
-    });
-
-    setPages((prevPages) => [
-      ...prevPages,
-      {
-        id: pages.length + 1,
-        title: story?.title || "",
-        image: result.imageUrl,
-        prompt: data.prompt,
-        characterUploads: data.characterUrls || [],
-        style: story?.style || "noir",
-        dbId: result.pageId,
-      },
-    ]);
-    setCurrentPage(pages.length);
-
-    setShowGenerateModal(false);
-  };
-
-  if (isLoading) {
+  if (loading || !story) {
     return (
-      <div className="h-screen flex items-center justify-center bg-background">
-        <StoryLoader />
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <div className="flex min-h-[70vh] items-center justify-center text-sm text-muted-foreground">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          正在打开剧本
+        </div>
       </div>
     );
   }
 
-  if (!story) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-background">
-        <div className="text-white">Story not found</div>
-      </div>
-    );
-  }
+  const preview = story.composedImageUrl
+    ? `${story.composedImageUrl}${story.composedImageUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(story.updatedAt)}`
+    : null;
+  const locked = !story.isOwner;
 
   return (
-    <div className="h-screen flex flex-col bg-background">
-      <EditorToolbar
-        title={story.title}
-        onContinueStory={handleAddPage}
-        onDownloadPDF={downloadPDF}
-        isGeneratingPDF={isGeneratingPDF}
-        isOwner={isOwner}
-        onTitleUpdate={handleTitleUpdate}
-      />
-
-      <div className="flex-1 flex overflow-hidden">
-        <PageSidebar
-          pages={pages}
-          currentPage={currentPage}
-          onPageSelect={setCurrentPage}
-          onAddPage={handleAddPage}
-          loadingPageId={loadingPageId}
-          onApiKeyClick={handleApiKeyClick}
-          isOwner={isOwner}
-        />
-        <ComicCanvas
-          page={pages[currentPage]}
-          pageIndex={currentPage}
-          totalPages={pages.length}
-          isLoading={loadingPageId === currentPage}
-          isOwner={isOwner}
-          onInfoClick={() => setShowInfoSheet(true)}
-          onRedrawClick={handleRedrawPage}
-          onDeletePage={() => handleDeletePage(currentPage)}
-          onNextPage={() =>
-            setCurrentPage((prev) =>
-              prev < pages.length - 1 ? prev + 1 : prev
-            )
-          }
-          onPrevPage={() =>
-            setCurrentPage((prev) => (prev > 0 ? prev - 1 : prev))
-          }
-        />
-      </div>
-
-      <ApiKeyModal
-        isOpen={showApiModal}
-        onClose={() => setShowApiModal(false)}
-        onSubmit={handleApiKeySubmit}
-      />
-      <GeneratePageModal
-        isOpen={showGenerateModal}
-        onClose={() => setShowGenerateModal(false)}
-        onGenerate={handleGeneratePage}
-        pageNumber={pages.length + 1}
-        existingCharacters={existingCharacterImages}
-        lastPageCharacters={
-          pages.length > 0 && pages[pages.length - 1]?.characterUploads
-            ? pages[pages.length - 1].characterUploads || []
-            : []
-        }
-        previousPageCharacters={
-          pages.length > 1 && pages[pages.length - 2]?.characterUploads
-            ? pages[pages.length - 2].characterUploads || []
-            : []
-        }
-      />
-      <PageInfoSheet
-        isOpen={showInfoSheet}
-        onClose={() => setShowInfoSheet(false)}
-        page={pages[currentPage]}
-      />
-
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Page</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete page{" "}
-              {pageToDelete !== null ? pageToDelete + 1 : ""}? This action
-              cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDeletePage}
-              className="bg-red-600 hover:bg-red-700"
+    <div className="min-h-screen bg-background">
+      <Navbar />
+      <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <section className="space-y-4">
+          <div>
+            <p className="text-xs text-muted-foreground">点子：{story.idea}</p>
+            <input
+              value={story.title}
+              disabled={locked}
+              onChange={(event) => setStory({ ...story, title: event.target.value })}
+              className="mt-1 w-full bg-transparent text-3xl font-semibold outline-none"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={save} disabled={locked || saving || generating}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              保存对白
+            </Button>
+            <Button onClick={generate} disabled={locked || generating}>
+              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              生成画面
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={!preview}
+              onClick={() => {
+                window.location.href = `/api/stories/${slug}/export?format=png`;
+              }}
             >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={showRedrawDialog} onOpenChange={setShowRedrawDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Redraw Page</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to redraw page {currentPage + 1}? This will regenerate the image for this page with a fresh result.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmRedrawPage}>
-              Redraw
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              下载长图 PNG
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={!preview}
+              onClick={() => {
+                window.location.href = `/api/stories/${slug}/export?format=pdf`;
+              }}
+            >
+              下载 PDF
+            </Button>
+            <button
+              type="button"
+              disabled={locked}
+              onClick={() => setStory({ ...story, layout: story.layout === "grid" ? "vertical" : "grid" })}
+              className="rounded-md bg-secondary px-3 text-xs"
+            >
+              {story.layout === "grid" ? "当前：田字格" : "当前：竖条长图"}
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            改对白后点「保存对白」，气泡会重画，格子画面不动。改画面描述后，要点该格的「重画这一格」才会换图。
+          </p>
+          {panels.map((panel) => (
+            <article key={panel.id} className="space-y-3 rounded-xl border border-border bg-card p-4">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-medium">
+                  第 {panel.panelIndex} 格 · {ROLE_LABEL[panel.role]}
+                </h2>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={locked || regenerating === panel.panelIndex || generating}
+                  onClick={() => regenerate(panel.panelIndex)}
+                >
+                  {regenerating === panel.panelIndex ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  重画这一格
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {SHOTS.map((shot) => (
+                  <button
+                    key={shot.id}
+                    type="button"
+                    disabled={locked}
+                    onClick={() => updatePanel(panel.panelIndex, { shot: shot.id })}
+                    className={`rounded-md px-2 py-1 ${panel.shot === shot.id ? "bg-white text-black" : "bg-secondary"}`}
+                  >
+                    {shot.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {CAST.map((name) => {
+                  const on = panel.characters.includes(name);
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      disabled={locked}
+                      onClick={() =>
+                        updatePanel(panel.panelIndex, {
+                          characters: on
+                            ? panel.characters.filter((item) => item !== name)
+                            : [...panel.characters, name],
+                        })
+                      }
+                      className={`rounded-full border px-2 py-1 ${on ? "border-indigo text-white" : "border-border text-muted-foreground"}`}
+                    >
+                      {name}
+                    </button>
+                  );
+                })}
+              </div>
+              <label className="block text-xs text-muted-foreground">
+                画面描述（给图像模型，建议英文）
+                <textarea
+                  value={panel.scene}
+                  disabled={locked}
+                  rows={3}
+                  onChange={(event) => updatePanel(panel.panelIndex, { scene: event.target.value })}
+                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                />
+              </label>
+              {panel.dialogue.map((line, lineIndex) => (
+                <div key={lineIndex} className="grid grid-cols-[7rem_1fr_auto] items-center gap-2">
+                  <select
+                    value={line.speaker}
+                    disabled={locked}
+                    onChange={(event) => {
+                      const dialogue = panel.dialogue.map((item, index) =>
+                        index === lineIndex ? { ...item, speaker: event.target.value } : item,
+                      );
+                      updatePanel(panel.panelIndex, { dialogue });
+                    }}
+                    className="rounded-md border border-border bg-background px-2 py-2 text-sm"
+                  >
+                    {CAST.map((name) => (
+                      <option key={name}>{name}</option>
+                    ))}
+                  </select>
+                  <input
+                    value={line.text}
+                    disabled={locked}
+                    onChange={(event) => {
+                      const dialogue = panel.dialogue.map((item, index) =>
+                        index === lineIndex ? { ...item, text: event.target.value } : item,
+                      );
+                      updatePanel(panel.panelIndex, { dialogue });
+                    }}
+                    className="rounded-md border border-border bg-background px-3 py-2 text-sm"
+                  />
+                  <span className={charCount(line.text) > 15 ? "text-xs text-red-400" : "text-xs text-muted-foreground"}>
+                    {charCount(line.text)}/15
+                  </span>
+                </div>
+              ))}
+              {panel.imageUrl && (
+                <img
+                  src={`${panel.imageUrl}?v=${encodeURIComponent(story.updatedAt)}`}
+                  alt={`第 ${panel.panelIndex} 格画面`}
+                  className="h-28 rounded-md border border-border object-cover"
+                />
+              )}
+            </article>
+          ))}
+        </section>
+        <aside className="lg:sticky lg:top-4 lg:self-start">
+          <div className="rounded-xl border border-border bg-card p-3">
+            <h2 className="mb-2 text-sm">合成预览</h2>
+            {preview ? (
+              <div className="max-h-[80vh] overflow-y-auto">
+                <img src={preview} alt={story.title} className="w-full rounded-md" />
+              </div>
+            ) : (
+              <p className="py-16 text-center text-sm text-muted-foreground">确认剧本后，再生成画面。</p>
+            )}
+          </div>
+        </aside>
+      </main>
     </div>
   );
 }

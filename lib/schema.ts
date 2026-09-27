@@ -1,57 +1,61 @@
-import { pgTable, text, integer, timestamp, uuid, jsonb, boolean, serial } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { relations } from "drizzle-orm";
 
-// Stories table
-export const stories = pgTable('stories', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  title: text('title').notNull(),
-  slug: text('slug').notNull().unique(),
-  description: text('description'),
-  style: text('style').default('noir').notNull(),
-  userId: text('user_id').notNull(),
-  usesOwnApiKey: boolean('uses_own_api_key').default(false),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+export const stories = sqliteTable("stories", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  slug: text("slug").notNull().unique(),
+  description: text("description"),
+  idea: text("idea").notNull(),
+  style: text("style").default("xiyou-chibi").notNull(),
+  layout: text("layout").default("vertical").notNull(),
+  userId: text("user_id").default("local").notNull(),
+  scriptJson: text("script_json"),
+  composedImageUrl: text("composed_image_url"),
+  status: text("status").default("script").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 
-// Pages table
-export const pages = pgTable('pages', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  storyId: uuid('story_id').references(() => stories.id, { onDelete: 'cascade' }).notNull(),
-  pageNumber: integer('page_number').notNull(),
-  prompt: text('prompt').notNull(),
-  characterImageUrls: jsonb('character_image_urls').$type<string[]>().default([]).notNull(),
-  generatedImageUrl: text('generated_image_url'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+export const panels = sqliteTable("panels", {
+  id: text("id").primaryKey(),
+  storyId: text("story_id")
+    .references(() => stories.id, { onDelete: "cascade" })
+    .notNull(),
+  panelIndex: integer("panel_index").notNull(),
+  role: text("role").notNull(),
+  scene: text("scene").notNull(),
+  shot: text("shot").notNull(),
+  charactersJson: text("characters_json").notNull(),
+  dialogueJson: text("dialogue_json").notNull(),
+  imageUrl: text("image_url"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 
-// Relations
+export const feedback = sqliteTable("feedback", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  message: text("message").notNull(),
+  userId: text("user_id"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+});
+
 export const storiesRelations = relations(stories, ({ many }) => ({
-  pages: many(pages),
+  panels: many(panels),
 }));
 
-export const pagesRelations = relations(pages, ({ one }) => ({
+export const panelsRelations = relations(panels, ({ one }) => ({
   story: one(stories, {
-    fields: [pages.storyId],
+    fields: [panels.storyId],
     references: [stories.id],
   }),
 }));
 
-// Feedback table
-export const feedback = pgTable('feedback', {
-  id: serial('id').primaryKey(),
-  message: text('message').notNull(),
-  userId: text('user_id'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-});
-
-// Types
-export type Feedback = typeof feedback.$inferSelect;
-export type NewFeedback = typeof feedback.$inferInsert;
-
 export type Story = typeof stories.$inferSelect;
 export type NewStory = typeof stories.$inferInsert;
-
-export type Page = typeof pages.$inferSelect;
-export type NewPage = typeof pages.$inferInsert;
+export type Page = typeof panels.$inferSelect;
+export type NewPage = typeof panels.$inferInsert;
+export type Panel = Page;
+export type NewPanel = NewPage;
+export type Feedback = typeof feedback.$inferSelect;
+export type NewFeedback = typeof feedback.$inferInsert;
