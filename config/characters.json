@@ -1,7 +1,7 @@
 {
   "styleId": "xiyou-chibi",
   "styleName": "西游简笔",
-  "stylePrompt": "simple gag-comic cartoon, clean thick black outlines, flat colors, no realistic shading, simple minimal background, cute chibi proportions, big head and small body, clear silhouette, bright even lighting, Chinese mythology characters drawn as modern office-worker personalities while keeping classic costumes",
+  "stylePrompt": "clean full-color cartoon, consistent black line weight, expressive faces, simple uncluttered background, cute chibi proportions with a big head and small body, thick clean outlines, flat colors, bright even lighting, no realistic shading, no text. Chinese mythology pilgrims keep their classic costumes and signature props, with modern office-worker expressions.",
   "referenceDir": "characters/refs",
   "characters": [
     {
@@ -10,7 +10,7 @@
       "nameEn": "Tang Sanzang",
       "aliases": ["唐三藏", "师傅", "唐长老"],
       "referenceFiles": ["tangseng.png", "tangseng-side.png"],
-      "visualDescription": "cute chibi young monk, pale skin, smooth bald head, small golden circlet on the forehead, gentle oval face, thin eyebrows, soft smile, layered deep-red kasaya robe with gold trim over a cream inner robe, simple wooden staff, no beard, big head and tiny body"
+      "visualDescription": "Tang Sanzang, a young Buddhist monk. Pale smooth skin, fully shaved bald head, a small golden circlet across the forehead. Gentle oval face, thin arched eyebrows, long calm eyes, small nose, soft closed-mouth smile, no beard. Costume: a deep crimson kasaya outer robe with gold embroidered trim, a cream-white inner robe visible at the collar and cuffs, and a cloth sash. Signature prop: a tall khakkhara tin staff (锡杖) with a wooden shaft and a metal head of jingling rings, held in one hand. Slim upright body, big chibi head, tiny hands and feet."
     },
     {
       "id": "wukong",
@@ -18,7 +18,7 @@
       "nameEn": "Sun Wukong",
       "aliases": ["悟空", "孙行者", "美猴王", "行者"],
       "referenceFiles": ["wukong.png", "wukong-side.png"],
-      "visualDescription": "cute chibi monkey king, golden-brown fur, peach face, round monkey ears, mischievous eyes, short spiky hair tuft, thin golden fillet circlet, red and gold short armor tunic, tiger-stripe skirt, long golden staff taller than his body, curled monkey tail, big head and tiny body"
+      "visualDescription": "Sun Wukong the Monkey King. Short golden-brown fur, peach-colored face, round monkey ears, bright mischievous eyes, a short spiky brown hair tuft on the crown. A thin gold fillet circlet (紧箍) around the forehead. Costume: a short red tunic with gold cloud trim, a yellow sash, a tiger-stripe orange-and-black skirt, brown boots, and a long curling monkey tail. Signature prop: the golden Ruyi Jingu Bang staff (金箍棒), a slim glowing gold rod taller than his body. Lean athletic chibi body, big head."
     },
     {
       "id": "bajie",
@@ -26,7 +26,7 @@
       "nameEn": "Zhu Bajie",
       "aliases": ["八戒", "悟能", "猪悟能", "天蓬"],
       "referenceFiles": ["bajie.png", "bajie-side.png"],
-      "visualDescription": "cute chibi pig monk, pink skin, large round snout, floppy pig ears, chubby belly, small eyes, short black hair tuft, dark teal open vest, loose brown pants, nine-tooth rake, big head and tiny body"
+      "visualDescription": "Zhu Bajie the pig monk. Pink skin, a large round pig snout with two nostrils, floppy pig ears, small squinting eyes, chubby cheeks, a short black hair tuft, and a round belly. Costume: a dark teal open vest over a bare chest, loose brown trousers, a black belt, and straw sandals. Signature prop: a nine-toothed iron rake (九齿钉耙) with a wide head of nine prongs and a long wooden handle. Short stout chibi body, big head."
     },
     {
       "id": "shaseng",
@@ -34,7 +34,7 @@
       "nameEn": "Sha Wujing",
       "aliases": ["沙和尚", "沙悟净", "悟净"],
       "referenceFiles": ["shaseng.png", "shaseng-side.png"],
-      "visualDescription": "cute chibi river monk, muted blue-gray skin, long calm face, short dark beard, bald head with a string of wooden prayer beads, brown and ochre robe, crescent-moon monk spade, slightly taller than the others but still chibi"
+      "visualDescription": "Sha Wujing the river monk. Muted blue-gray skin, a long calm rectangular face, thick dark eyebrows, a short neat beard and mustache, a fully shaved bald head, and a loop of large wooden prayer beads around the neck. Costume: an ochre-brown monk robe with darker brown sleeves and a rope belt. Signature prop: a crescent monk's demon-subduing spade (降妖宝杖), a wooden shaft with a crescent moon blade on one end. Taller and broader than the others, still chibi, steady posture."
     },
     {
       "id": "bailongma",
@@ -42,7 +42,7 @@
       "nameEn": "White Dragon Horse",
       "aliases": ["白龙", "小白龙", "龙马"],
       "referenceFiles": ["bailongma.png", "bailongma-side.png"],
-      "visualDescription": "cute small white dragon-horse, white coat, tiny pale dragon horns, flowing white mane, pale blue eyes, faint dragon whiskers, red saddle blanket, chibi horse body"
+      "visualDescription": "White Dragon Horse. Small white horse body, flowing white mane and tail, tiny pale dragon horns, pale blue eyes, faint white dragon whiskers, and a red saddle blanket with a gold edge. Chibi proportions."
     }
   ]
 }

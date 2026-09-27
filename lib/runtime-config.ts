@@ -1,4 +1,4 @@
-export type ProviderKind = "mock" | "together" | "openai";
+export type ProviderKind = "mock" | "together" | "openai" | "local";
 
 function normalizeKind(value: string | undefined): ProviderKind | null {
   const kind = value?.trim().toLowerCase();
@@ -6,6 +6,7 @@ function normalizeKind(value: string | undefined): ProviderKind | null {
   if (kind === "mock" || kind === "offline") return "mock";
   if (kind === "together") return "together";
   if (kind === "openai" || kind === "openai-compatible") return "openai";
+  if (kind === "local") return "local";
   return null;
 }
 
@@ -26,16 +27,25 @@ export function baseMode(): ProviderKind {
 }
 
 export function textProviderKind(): ProviderKind {
-  return normalizeKind(process.env.TEXT_PROVIDER) ?? baseMode();
+  const explicit = normalizeKind(process.env.TEXT_PROVIDER);
+  if (explicit) return explicit;
+  if (process.env.LOCAL_TEXT_BASE_URL?.trim()) return "local";
+  return baseMode();
 }
 
 export function imageProviderKind(): ProviderKind {
-  return normalizeKind(process.env.IMAGE_PROVIDER) ?? baseMode();
+  const explicit = normalizeKind(process.env.IMAGE_PROVIDER);
+  if (explicit) return explicit;
+  if (process.env.LOCAL_IMAGE_BASE_URL?.trim()) return "local";
+  return baseMode();
 }
 
 export function textModel() {
-  if (process.env.TEXT_MODEL?.trim()) return process.env.TEXT_MODEL.trim();
   const kind = textProviderKind();
+  if (kind === "local") {
+    return process.env.LOCAL_TEXT_MODEL?.trim() || process.env.TEXT_MODEL?.trim() || "local";
+  }
+  if (process.env.TEXT_MODEL?.trim()) return process.env.TEXT_MODEL.trim();
   if (kind === "together") return "Qwen/Qwen3-235B-A22B-Instruct-2507";
   if (kind === "openai") {
     const base = process.env.TEXT_BASE_URL || "";
@@ -46,11 +56,35 @@ export function textModel() {
 }
 
 export function imageModel() {
-  if (process.env.IMAGE_MODEL?.trim()) return process.env.IMAGE_MODEL.trim();
   const kind = imageProviderKind();
+  if (kind === "local") return localImageModelName() || "local";
+  if (process.env.IMAGE_MODEL?.trim()) return process.env.IMAGE_MODEL.trim();
   if (kind === "together") return "google/flash-image-2.5";
   if (kind === "openai") return "gpt-image-1";
   return "mock";
+}
+
+export function localImageModelName() {
+  return process.env.LOCAL_IMAGE_MODEL?.trim() || "";
+}
+
+export function localImageApiKey() {
+  return process.env.LOCAL_IMAGE_API_KEY?.trim() || "";
+}
+
+export function localImageUsesEdits() {
+  return /^(1|true|yes|on)$/i.test(process.env.LOCAL_IMAGE_EDITS?.trim() || "");
+}
+
+export function localImageTimeoutMs() {
+  const value = Number(process.env.LOCAL_IMAGE_TIMEOUT_MS || 300_000);
+  return Number.isFinite(value) && value >= 1000 ? value : 300_000;
+}
+
+export function localImageSizeString(width: number, height: number) {
+  const configured = process.env.LOCAL_IMAGE_SIZE?.trim();
+  if (configured) return configured;
+  return `${width}x${height}`;
 }
 
 export function textApiKey() {

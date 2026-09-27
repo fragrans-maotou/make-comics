@@ -8,7 +8,7 @@ import { imageProviderKind } from "@/lib/runtime-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+export const maxDuration = 1200;
 
 export async function POST(
   _request: Request,

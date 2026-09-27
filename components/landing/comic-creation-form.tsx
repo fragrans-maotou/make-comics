@@ -28,13 +28,16 @@ export function ComicCreationForm({
 }) {
   const router = useRouter();
   const { toast } = useToast();
-  const [mock, setMock] = useState(true);
+  const [banner, setBanner] = useState<"mock" | "local" | "live">("mock");
 
   useEffect(() => {
     fetch("/api/config")
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
-        if (data && typeof data.mock === "boolean") setMock(data.mock);
+        if (!data) return;
+        if (data.imageProvider === "local") setBanner("local");
+        else if (data.mock === false) setBanner("live");
+        else setBanner("mock");
       })
       .catch(() => {});
   }, []);
@@ -124,9 +127,14 @@ export function ComicCreationForm({
         </button>
       </div>
 
-      {mock && (
+      {banner === "mock" && (
         <p className="text-xs text-muted-foreground">
           当前是离线示例模式：剧本和分格画面都在本地生成，用来检查气泡里的中文。配好模型钥匙后会改走真实模型。
+        </p>
+      )}
+      {banner === "local" && (
+        <p className="text-xs text-muted-foreground">
+          画面由你自己的本地生图服务绘制，请求从服务器发出。没有文本钥匙时，剧本仍用示例稿。
         </p>
       )}
 

@@ -8,19 +8,25 @@ import {
   type PanelView,
   type StoryBundle,
 } from "./db-actions";
-import { imageSize } from "./runtime-config";
+import { LocalImageError } from "./local-image";
+import { imageProviderKind, imageSize, localImageUsesEdits } from "./runtime-config";
 import type { StripLayout } from "./script-schema";
 import { readMedia, saveMedia } from "./storage";
 
 async function drawPanel(panel: PanelView) {
-  const { prompt, referenceImages } = buildPanelPrompt({
-    index: panel.panelIndex,
-    role: panel.role,
-    scene: panel.scene,
-    shot: panel.shot,
-    characters: panel.characters,
-    dialogue: panel.dialogue,
-  });
+  const kind = imageProviderKind();
+  const attachReferences = kind !== "local" || localImageUsesEdits();
+  const { prompt, referenceImages } = buildPanelPrompt(
+    {
+      index: panel.panelIndex,
+      role: panel.role,
+      scene: panel.scene,
+      shot: panel.shot,
+      characters: panel.characters,
+      dialogue: panel.dialogue,
+    },
+    { attachReferences },
+  );
   const size = imageSize();
   const provider = getImageProvider();
   let lastError: unknown;
@@ -35,6 +41,7 @@ async function drawPanel(panel: PanelView) {
       });
     } catch (error) {
       lastError = error;
+      if (error instanceof LocalImageError) break;
     }
   }
   throw lastError instanceof Error ? lastError : new Error("画面生成失败");

@@ -1,4 +1,5 @@
 import Together from "together-ai";
+import { generateLocalImage } from "./local-image";
 import { drawPlaceholderPanel } from "./mock-art";
 import {
   imageApiKey,
@@ -67,6 +68,52 @@ async function togetherText(request: TextRequest) {
     const response = await client.chat.completions.create(body);
     return response.choices[0]?.message?.content?.trim() || "";
   }
+}
+
+function localTextRoot() {
+  let raw = (process.env.LOCAL_TEXT_BASE_URL || "").trim().replace(/\/+$/, "");
+  raw = raw.replace(/\/chat\/completions$/i, "");
+  return raw;
+}
+
+async function localText(request: TextRequest) {
+  const root = localTextRoot();
+  if (!root) throw new Error("未设置 LOCAL_TEXT_BASE_URL");
+  const url = `${root}/chat/completions`;
+  const key = process.env.LOCAL_TEXT_API_KEY?.trim() || "";
+  const model = process.env.LOCAL_TEXT_MODEL?.trim() || textModel();
+  console.error(`[local-text] POST ${url}`);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(key ? { Authorization: `Bearer ${key}` } : {}),
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: request.system },
+          { role: "user", content: request.user },
+        ],
+        temperature: request.temperature ?? 0.7,
+        max_tokens: request.maxTokens ?? 2200,
+      }),
+      signal: AbortSignal.timeout(120_000),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`连不上本地文本服务 ${url}：${message}`);
+  }
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`本地文本失败（${response.status}）${url}：${text.replace(/\s+/g, " ").trim().slice(0, 280)}`);
+  }
+  const json = JSON.parse(text) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  return json.choices?.[0]?.message?.content?.trim() || "";
 }
 
 async function openAiText(request: TextRequest) {
@@ -166,7 +213,12 @@ export function getTextProvider(): TextProvider {
       if (kind === "mock") {
         throw new Error("mock 文本提供者不应直接调用 complete");
       }
-      const content = kind === "together" ? await togetherText(request) : await openAiText(request);
+      const content =
+        kind === "together"
+          ? await togetherText(request)
+          : kind === "local"
+            ? await localText(request)
+            : await openAiText(request);
       if (!content) throw new Error("文本模型返回为空");
       return content;
     },
@@ -182,6 +234,7 @@ export function getImageProvider(): ImageProvider {
       if (kind === "mock") {
         return drawPlaceholderPanel(request.hint?.characters ?? [], request.hint?.index ?? 1);
       }
+      if (kind === "local") return generateLocalImage(request);
       return kind === "together" ? togetherImage(request) : openAiImage(request);
     },
   };

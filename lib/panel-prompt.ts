@@ -1,12 +1,17 @@
 import { referenceDataUrl, resolveCast, stylePrompt, type CharacterSheet } from "./characters";
 import type { ScriptPanel } from "./script-schema";
 
-export function buildPanelPrompt(panel: ScriptPanel) {
+export function buildPanelPrompt(panel: ScriptPanel, options?: { attachReferences?: boolean }) {
+  const attachReferences = options?.attachReferences !== false;
   const cast = resolveCast(panel.characters);
   const references: string[] = [];
   const lines: string[] = [];
 
   for (const character of cast) {
+    if (!attachReferences) {
+      lines.push(`${character.nameEn} (${character.name}): ${character.visualDescription}`);
+      continue;
+    }
     if (character.references.length === 0) {
       lines.push(
         `${character.nameEn} (${character.name}) has no reference image. Draw them only from this description: ${character.visualDescription}`,
@@ -36,7 +41,11 @@ ART STYLE:
 ${stylePrompt()}
 
 CAST CONSISTENCY (highest priority):
-Reference images are provided in this exact order. The first reference image is image 1, the second is image 2, and so on. Never swap them.
+${
+  references.length > 0
+    ? "Reference images are provided in this exact order. The first reference image is image 1, the second is image 2, and so on. Never swap them."
+    : "No reference images are attached. Draw each character only from the written description. Keep costume, colors, face, and signature props consistent."
+}
 ${lines.join("\n")}
 
 SHOT: ${panel.shot} shot
