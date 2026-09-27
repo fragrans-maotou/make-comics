@@ -42,7 +42,19 @@ const MIME: Record<string, string> = {
   ".webp": "image/webp",
 };
 
-let cached: CharacterSheet[] | null = null;
+let cached: { stamp: string; sheets: CharacterSheet[] } | null = null;
+
+function referenceStamp(dir: string, files: string[]) {
+  return files
+    .map((file) => {
+      if (/^https?:\/\//i.test(file)) return file;
+      const full = path.join(dir, file);
+      if (!fs.existsSync(full)) return `${file}:missing`;
+      const stat = fs.statSync(full);
+      return `${file}:${stat.mtimeMs}:${stat.size}`;
+    })
+    .join("|");
+}
 
 export function stylePrompt() {
   return characterConfig().stylePrompt;
@@ -67,9 +79,13 @@ export function canonicalName(name: string) {
 }
 
 export function loadCast(): CharacterSheet[] {
-  if (cached) return cached;
   const config = characterConfig();
   const dir = path.resolve(process.cwd(), config.referenceDir);
+  const stamp = referenceStamp(
+    dir,
+    config.characters.flatMap((character) => character.referenceFiles),
+  );
+  if (cached?.stamp === stamp) return cached.sheets;
   const sheets = config.characters.map((character) => {
     const references: CharacterSheet["references"] = [];
     for (const file of character.referenceFiles) {
@@ -95,7 +111,7 @@ export function loadCast(): CharacterSheet[] {
       references,
     };
   });
-  cached = sheets;
+  cached = { stamp, sheets };
   return sheets;
 }
 

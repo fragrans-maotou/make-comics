@@ -116,6 +116,10 @@ export function imageBaseUrl() {
   );
 }
 
+export function imageStyle() {
+  return process.env.IMAGE_STYLE?.trim() || "";
+}
+
 export function imageSize() {
   const width = Number(process.env.IMAGE_WIDTH || 1024);
   const height = Number(process.env.IMAGE_HEIGHT || 1024);

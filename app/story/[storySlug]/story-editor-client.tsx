@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import Link from "next/link";
 import { Navbar } from "@/components/landing/navbar";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -248,7 +249,11 @@ export function StoryEditorClient() {
             </button>
           </div>
           <p className="text-xs text-muted-foreground">
-            改对白后点「保存对白」，气泡会重画，格子画面不动。改画面描述后，要点该格的「重画这一格」才会换图。
+            人物按
+            <Link href="/characters" className="mx-1 underline">
+              角色设定
+            </Link>
+            来画，Q 版大头小身。改对白后点「保存对白」，气泡会重画，格子画面不动。
           </p>
           {panels.map((panel) => (
             <article key={panel.id} className="space-y-3 rounded-xl border border-border bg-card p-4">

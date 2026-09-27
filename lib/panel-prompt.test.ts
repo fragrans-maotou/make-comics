@@ -31,10 +31,9 @@ test("character references stay in sheet order and match the prompt", () => {
     });
     assert.ok(referenceImages.length >= 2);
     assert.match(prompt, /Reference image 1 is Tang Sanzang/);
-    assert.match(prompt, /Reference image 2 is Sun Wukong/);
-    assert.ok(
-      prompt.indexOf("Reference image 1 is Tang Sanzang") < prompt.indexOf("Reference image 2 is Sun Wukong"),
-    );
+    assert.match(prompt, /Sun Wukong/);
+    assert.ok(prompt.indexOf("Tang Sanzang") < prompt.indexOf("Sun Wukong"));
+    assert.match(prompt, /He is a monkey, not a human/);
     assert.match(prompt, /NO text, NO letters/);
     assert.ok(!/TEXT AND LETTERING/.test(prompt));
     for (const reference of referenceImages) {

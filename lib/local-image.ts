@@ -1,5 +1,6 @@
 import type { ImageRequest } from "./ai";
 import {
+  imageStyle,
   localImageApiKey,
   localImageModelName,
   localImageSizeString,
@@ -133,8 +134,12 @@ export async function generateLocalImage(request: ImageRequest) {
         n: 1,
         size,
         response_format: "b64_json",
+        negative_prompt:
+          "blurry, low quality, distorted, watermark, text, signature, child, loli, shota, underage, realistic photo, extra limbs, business suit, t-shirt, wrong species",
       };
       if (model) body.model = model;
+      const style = imageStyle();
+      if (style) body.style = style;
       response = await fetch(endpoint, {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },

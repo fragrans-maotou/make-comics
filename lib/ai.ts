@@ -6,6 +6,7 @@ import {
   imageBaseUrl,
   imageModel,
   imageProviderKind,
+  imageStyle,
   textApiKey,
   textBaseUrl,
   textModel,
@@ -83,30 +84,42 @@ async function localText(request: TextRequest) {
   const key = process.env.LOCAL_TEXT_API_KEY?.trim() || "";
   const model = process.env.LOCAL_TEXT_MODEL?.trim() || textModel();
   console.error(`[local-text] POST ${url}`);
-  let response: Response;
-  try {
-    response = await fetch(url, {
+  const payload = {
+    model,
+    messages: [
+      { role: "system", content: request.system },
+      { role: "user", content: request.user },
+    ],
+    temperature: request.temperature ?? 0.7,
+    max_tokens: request.maxTokens ?? 2200,
+  };
+  const send = (body: Record<string, unknown>) =>
+    fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(key ? { Authorization: `Bearer ${key}` } : {}),
       },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: request.system },
-          { role: "user", content: request.user },
-        ],
-        temperature: request.temperature ?? 0.7,
-        max_tokens: request.maxTokens ?? 2200,
-      }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(120_000),
     });
+  let response: Response;
+  try {
+    response = await send({ ...payload, reasoning_effort: "none" });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`连不上本地文本服务 ${url}：${message}`);
   }
-  const text = await response.text();
+  let text = await response.text();
+  if (!response.ok && response.status === 400 && /reasoning_effort/i.test(text)) {
+    try {
+      response = await send(payload);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`连不上本地文本服务 ${url}：${message}`);
+    }
+    text = await response.text();
+  }
   if (!response.ok) {
     throw new Error(`本地文本失败（${response.status}）${url}：${text.replace(/\s+/g, " ").trim().slice(0, 280)}`);
   }
@@ -119,24 +132,36 @@ async function localText(request: TextRequest) {
 async function openAiText(request: TextRequest) {
   const key = textApiKey();
   if (!key) throw new Error("缺少 TEXT_API_KEY 或 OPENAI_API_KEY");
-  const response = await fetch(`${textBaseUrl()}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: textModel(),
-      messages: [
-        { role: "system", content: request.system },
-        { role: "user", content: request.user },
-      ],
-      temperature: request.temperature ?? 0.7,
-      max_tokens: request.maxTokens ?? 2200,
-    }),
-  });
+  const payload = {
+    model: textModel(),
+    messages: [
+      { role: "system", content: request.system },
+      { role: "user", content: request.user },
+    ],
+    temperature: request.temperature ?? 0.7,
+    max_tokens: request.maxTokens ?? 2200,
+  };
+  const send = (body: Record<string, unknown>) =>
+    fetch(`${textBaseUrl()}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  // LM Studio 上的思考模型会把额度花在 reasoning 上，正文变空。不支持该字段时再重试。
+  let response = await send({ ...payload, reasoning_effort: "none" });
   if (!response.ok) {
-    throw new Error(`文本模型请求失败：${response.status} ${await response.text()}`);
+    const detail = await response.text();
+    if (response.status === 400 && /reasoning_effort/i.test(detail)) {
+      response = await send(payload);
+      if (!response.ok) {
+        throw new Error(`文本模型请求失败：${response.status} ${await response.text()}`);
+      }
+    } else {
+      throw new Error(`文本模型请求失败：${response.status} ${detail}`);
+    }
   }
   const json = (await response.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
@@ -172,6 +197,7 @@ async function togetherImage(request: ImageRequest) {
 async function openAiImage(request: ImageRequest) {
   const key = imageApiKey();
   if (!key) throw new Error("缺少 IMAGE_API_KEY 或 OPENAI_API_KEY");
+  const style = imageStyle();
   const response = await fetch(`${imageBaseUrl()}/images/generations`, {
     method: "POST",
     headers: {
@@ -186,6 +212,9 @@ async function openAiImage(request: ImageRequest) {
       height: request.height,
       response_format: "b64_json",
       reference_images: request.referenceImages,
+      negative_prompt:
+        "blurry, low quality, distorted, watermark, text, signature, child, loli, shota, underage, realistic photo, extra limbs, business suit, t-shirt, wrong species",
+      ...(style ? { style } : {}),
     }),
   });
   if (!response.ok) {

@@ -38,6 +38,12 @@ export function Navbar() {
           <span className="hidden text-muted-foreground sm:inline">上游</span>
         </Link>
         <Link
+          href="/characters"
+          className="glass-panel glass-panel-hover flex items-center gap-2 rounded-md px-3 py-1.5 text-xs"
+        >
+          <span className="text-muted-foreground">角色</span>
+        </Link>
+        <Link
           href={onStories ? "/" : "/stories"}
           className="glass-panel glass-panel-hover flex items-center gap-2 rounded-md px-3 py-1.5 text-xs"
         >
